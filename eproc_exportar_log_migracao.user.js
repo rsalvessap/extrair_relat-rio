@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         eproc - Exportar Log de Migração para Excel
 // @namespace    https://eproc1g.tjsp.jus.br/
-// @version      1.2
+// @version      1.3
 // @description  Adiciona botão para exportar a tabela de Log de Migração para Excel (.xlsx)
 // @author       rsalvessap
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
@@ -15,43 +15,30 @@
     const params = new URLSearchParams(window.location.search);
     if (!params.get('acao')?.includes('mig_log')) return;
 
-    // --- Estilos da barra de progresso verde (só no estado carregando) ---
+    // Apenas o @keyframes para a animação de progresso — nenhum seletor que toque no botão
     const style = document.createElement('style');
     style.textContent = `
-        #btnExportarExcel.carregando {
-            position: relative;
-            overflow: hidden;
-            cursor: wait;
-        }
-        #btnExportarExcel.carregando::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            height: 3px;
-            background-color: #28a745;
-            animation: progresso-carregamento 1.8s ease-in-out infinite;
-        }
-        @keyframes progresso-carregamento {
-            0%   { width: 0; }
-            50%  { width: 75%; }
-            100% { width: 100%; }
+        @keyframes pulso-borda-verde {
+            0%, 100% { border-bottom-color: #28a745; }
+            50%      { border-bottom-color: #8ae6a1; }
         }
     `;
     (document.head || document.documentElement).appendChild(style);
 
-    // --- Cria o botão imediatamente em estado de carregamento ---
+    // --- Cria o botão igual ao padrão do script de lotações ---
     const btn = document.createElement('button');
-    btn.id = 'btnExportarExcel';
     btn.type = 'button';
-    btn.className = 'eproc-button-primary carregando';
+    btn.className = 'eproc-button-primary';
     btn.style.marginLeft = '4px';
+
+    // Estado inicial: carregando (indicador verde pulsante na borda inferior)
     btn.disabled = true;
     btn.textContent = '\u23F3 Carregando tabela\u2026';
+    btn.style.borderBottom = '3px solid #28a745';
+    btn.style.animation = 'pulso-borda-verde 1.5s ease-in-out infinite';
 
     // --- Posiciona o botão na página ---
     function posicionarBotao() {
-        // Tenta barras de comando nativas do eProc / Infra
         const barraComandos = document.querySelector('#divInfraBarraComandosSuperior')
             || document.querySelector('.infraBarraComandosSuperior');
         if (barraComandos) {
@@ -59,14 +46,12 @@
             return true;
         }
 
-        // Tenta inserir ao lado de um botão nativo existente
         const btnNativo = document.querySelector('button[type="submit"], button[type="button"], input[type="submit"]');
         if (btnNativo && btnNativo.parentNode) {
             btnNativo.after(btn);
             return true;
         }
 
-        // Tenta área principal de conteúdo
         const areaConteudo = document.querySelector('#divInfraAreaTelaD')
             || document.querySelector('#divInfraAreaTela')
             || document.querySelector('.infraAreaTela');
@@ -78,13 +63,11 @@
         return false;
     }
 
-    // Tenta posicionar imediatamente; se não conseguir, faz polling
     if (!posicionarBotao()) {
         const timerPosicao = setInterval(() => {
             if (posicionarBotao()) clearInterval(timerPosicao);
         }, 200);
 
-        // Fallback: após 3s, coloca no body mesmo
         setTimeout(() => {
             if (!btn.parentNode) {
                 clearInterval(timerPosicao);
@@ -105,22 +88,25 @@
             } else if (elapsed >= maxWait) {
                 clearInterval(timer);
                 btn.textContent = '\u274C Tabela n\u00E3o encontrada';
-                btn.classList.remove('carregando');
+                btn.style.borderBottom = '';
+                btn.style.animation = '';
             }
             elapsed += interval;
         }, interval);
     }
 
     aguardarTabela(function () {
-        // Transição para estado pronto
-        btn.classList.remove('carregando');
+        // Transição para estado pronto — remove todo inline extra
         btn.disabled = false;
         btn.textContent = '\uD83D\uDCCA Exportar Excel';
+        btn.style.borderBottom = '';
+        btn.style.animation = '';
 
         btn.addEventListener('click', function () {
             btn.disabled = true;
             btn.textContent = '\u23F3 Exportando\u2026';
-            btn.classList.add('carregando');
+            btn.style.borderBottom = '3px solid #28a745';
+            btn.style.animation = 'pulso-borda-verde 1.5s ease-in-out infinite';
 
             setTimeout(function () {
                 try {
@@ -181,7 +167,8 @@
         function resetBtn() {
             btn.disabled = false;
             btn.textContent = '\uD83D\uDCCA Exportar Excel';
-            btn.classList.remove('carregando');
+            btn.style.borderBottom = '';
+            btn.style.animation = '';
         }
     });
 

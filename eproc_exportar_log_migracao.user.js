@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         eproc - Exportar Log de Migração para Excel
 // @namespace    https://eproc1g.tjsp.jus.br/
-// @version      1.0
+// @version      1.1
 // @description  Adiciona botão para exportar a tabela de Log de Migração para Excel (.xlsx)
 // @author       rsalvessap
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
@@ -12,12 +12,93 @@
 (function () {
     'use strict';
 
-    // Executa apenas na página de Log de Migração
     const params = new URLSearchParams(window.location.search);
     if (!params.get('acao')?.includes('mig_log')) return;
 
-    // Aguarda a tabela carregar antes de injetar o botão
-    function waitForTable(callback, maxWait = 10000) {
+    // --- Estilos da barra de progresso verde ---
+    const style = document.createElement('style');
+    style.textContent = `
+        #btnExportarExcel {
+            position: relative;
+            overflow: hidden;
+        }
+        #btnExportarExcel.carregando {
+            opacity: 0.85;
+            cursor: wait;
+        }
+        #btnExportarExcel.carregando::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background-color: #28a745;
+            border-radius: 0 0 3px 3px;
+            animation: progresso-carregamento 1.8s ease-in-out infinite;
+        }
+        @keyframes progresso-carregamento {
+            0%   { width: 0; }
+            50%  { width: 75%; }
+            100% { width: 100%; }
+        }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+
+    // --- Cria o botão imediatamente em estado de carregamento ---
+    const btn = document.createElement('button');
+    btn.id = 'btnExportarExcel';
+    btn.type = 'button';
+    btn.className = 'eproc-button-primary carregando';
+    btn.style.marginLeft = '4px';
+    btn.disabled = true;
+    btn.textContent = '\u23F3 Carregando tabela\u2026';
+
+    // --- Posiciona o botão na página ---
+    function posicionarBotao() {
+        // Tenta barras de comando nativas do eProc / Infra
+        const barraComandos = document.querySelector('#divInfraBarraComandosSuperior')
+            || document.querySelector('.infraBarraComandosSuperior');
+        if (barraComandos) {
+            barraComandos.appendChild(btn);
+            return true;
+        }
+
+        // Tenta inserir ao lado de um botão nativo existente
+        const btnNativo = document.querySelector('button[type="submit"], button[type="button"], input[type="submit"]');
+        if (btnNativo && btnNativo.parentNode) {
+            btnNativo.after(btn);
+            return true;
+        }
+
+        // Tenta área principal de conteúdo
+        const areaConteudo = document.querySelector('#divInfraAreaTelaD')
+            || document.querySelector('#divInfraAreaTela')
+            || document.querySelector('.infraAreaTela');
+        if (areaConteudo) {
+            areaConteudo.insertBefore(btn, areaConteudo.firstChild);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Tenta posicionar imediatamente; se não conseguir, faz polling
+    if (!posicionarBotao()) {
+        const timerPosicao = setInterval(() => {
+            if (posicionarBotao()) clearInterval(timerPosicao);
+        }, 200);
+
+        // Fallback: após 3s, coloca no body mesmo
+        setTimeout(() => {
+            if (!btn.parentNode) {
+                clearInterval(timerPosicao);
+                document.body.appendChild(btn);
+            }
+        }, 3000);
+    }
+
+    // --- Aguarda a tabela carregar e ativa o botão ---
+    function aguardarTabela(callback, maxWait = 15000) {
         const interval = 300;
         let elapsed = 0;
         const timer = setInterval(() => {
@@ -27,50 +108,29 @@
                 callback(table);
             } else if (elapsed >= maxWait) {
                 clearInterval(timer);
-                console.warn('[Exportar Excel] Tabela não encontrada após ' + maxWait + 'ms.');
+                btn.textContent = '\u274C Tabela n\u00E3o encontrada';
+                btn.classList.remove('carregando');
             }
             elapsed += interval;
         }, interval);
     }
 
-    function injectButton() {
-        if (document.getElementById('btnExportarExcel')) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'btnExportarExcel';
-        btn.type = 'button';
-        btn.innerHTML = '&#128202; Exportar Excel';
-        btn.style.cssText = `
-            position: fixed;
-            top: 120px;
-            right: 20px;
-            z-index: 99999;
-            background-color: #1D6F42;
-            color: white;
-            border: 2px solid #155835;
-            border-radius: 6px;
-            padding: 8px 16px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            font-family: Arial, sans-serif;
-            transition: background-color 0.2s;
-        `;
-
-        btn.onmouseover = () => btn.style.backgroundColor = '#155835';
-        btn.onmouseout  = () => btn.style.backgroundColor = '#1D6F42';
+    aguardarTabela(function () {
+        // Transição para estado pronto
+        btn.classList.remove('carregando');
+        btn.disabled = false;
+        btn.textContent = '\uD83D\uDCCA Exportar Excel';
 
         btn.addEventListener('click', function () {
             btn.disabled = true;
-            btn.innerHTML = '&#9203; Exportando...';
-            btn.style.backgroundColor = '#888';
+            btn.textContent = '\u23F3 Exportando\u2026';
+            btn.classList.add('carregando');
 
             setTimeout(function () {
                 try {
                     const table = document.querySelector('table.infraTable');
                     if (!table) {
-                        alert('Tabela de resultados não encontrada!');
+                        alert('Tabela de resultados n\u00E3o encontrada!');
                         resetBtn();
                         return;
                     }
@@ -80,7 +140,7 @@
                     const numCols = headers.length;
 
                     if (numCols === 0) {
-                        alert('Cabeçalho da tabela não encontrado!');
+                        alert('Cabe\u00E7alho da tabela n\u00E3o encontrado!');
                         resetBtn();
                         return;
                     }
@@ -105,13 +165,7 @@
                         return { wch: Math.min(maxLen + 2, 50) };
                     });
 
-                    ws['!freeze'] = {
-                        xSplit: 0, ySplit: 1,
-                        topLeftCell: 'A2',
-                        activePane: 'bottomLeft'
-                    };
-
-                    XLSX.utils.book_append_sheet(wb, ws, 'Log de Migração');
+                    XLSX.utils.book_append_sheet(wb, ws, 'Log de Migra\u00E7\u00E3o');
 
                     const dataStr = new Date().toISOString().slice(0, 10);
                     const filename = `log_migracao_${dataStr}.xlsx`;
@@ -119,10 +173,10 @@
                     XLSX.writeFile(wb, filename);
 
                     resetBtn();
-                    alert(`✅ Exportação concluída!\nArquivo: ${filename}\nTotal de registros: ${rows.length}`);
+                    alert(`\u2705 Exporta\u00E7\u00E3o conclu\u00EDda!\nArquivo: ${filename}\nTotal de registros: ${rows.length}`);
 
                 } catch (e) {
-                    alert('Erro na exportação: ' + e.message);
+                    alert('Erro na exporta\u00E7\u00E3o: ' + e.message);
                     resetBtn();
                 }
             }, 200);
@@ -130,13 +184,9 @@
 
         function resetBtn() {
             btn.disabled = false;
-            btn.innerHTML = '&#128202; Exportar Excel';
-            btn.style.backgroundColor = '#1D6F42';
+            btn.textContent = '\uD83D\uDCCA Exportar Excel';
+            btn.classList.remove('carregando');
         }
-
-        document.body.appendChild(btn);
-    }
-
-    waitForTable(injectButton);
+    });
 
 })();

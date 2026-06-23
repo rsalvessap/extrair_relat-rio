@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         eproc - Exportar Log de Migração para Excel
 // @namespace    https://eproc1g.tjsp.jus.br/
-// @version      1.1
+// @version      1.2
 // @description  Adiciona botão para exportar a tabela de Log de Migração para Excel (.xlsx)
 // @author       rsalvessap
 // @match        https://eproc1g.tjsp.jus.br/eproc/controlador.php*
@@ -15,15 +15,12 @@
     const params = new URLSearchParams(window.location.search);
     if (!params.get('acao')?.includes('mig_log')) return;
 
-    // --- Estilos da barra de progresso verde ---
+    // --- Estilos da barra de progresso verde (só no estado carregando) ---
     const style = document.createElement('style');
     style.textContent = `
-        #btnExportarExcel {
+        #btnExportarExcel.carregando {
             position: relative;
             overflow: hidden;
-        }
-        #btnExportarExcel.carregando {
-            opacity: 0.85;
             cursor: wait;
         }
         #btnExportarExcel.carregando::after {
@@ -33,7 +30,6 @@
             left: 0;
             height: 3px;
             background-color: #28a745;
-            border-radius: 0 0 3px 3px;
             animation: progresso-carregamento 1.8s ease-in-out infinite;
         }
         @keyframes progresso-carregamento {
